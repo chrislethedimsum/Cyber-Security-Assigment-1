@@ -1,17 +1,21 @@
-#!/usr/bin/env python3
-# hash_benchmark.py
-# Benchmark hashing algorithms: MD5, SHA-1, SHA-256, SHA-512
-
 import time, os, gc, statistics, resource
 import psutil
 import pandas as pd
-import hashlib
 import matplotlib.pyplot as plt
 
+# Crypto libraries
+from Crypto.PublicKey import RSA, DSA, ECC
+from Crypto.Signature import pkcs1_15, DSS
+from Crypto.Hash import SHA256
+from Crypto.Random import get_random_bytes
+from cryptography.hazmat.primitives.asymmetric import dh
+from cryptography.hazmat.backends import default_backend
+
+
 # ========== GLOBAL SETTINGS ==========
-ITERATIONS = 10000
+ITERATIONS = 1000
 RESULT_DIR = "results"
-CSV_PATH = f"{RESULT_DIR}/hash_results.csv"
+CSV_PATH = f"{RESULT_DIR}/asymmetric_results.csv"
 
 os.makedirs(RESULT_DIR, exist_ok=True)
 
@@ -60,26 +64,49 @@ def measure(func, iterations=ITERATIONS):
     wall = end - start
     return wall, cpu_used, peak_kb
 
+
 # ========== BENCHMARK FUNCTIONS ==========
-def md5_hash(i, passwords):
-    pw = passwords[i % len(passwords)]
-    h = hashlib.md5(pw)
-    h.digest()
+def rsa_keygen(_):
+    RSA.generate(1024)
 
-def sha1_hash(i, passwords):
+def rsa_sign_verify(i, passwords):
     pw = passwords[i % len(passwords)]
-    h = hashlib.sha1(pw)
-    h.digest()
+    key = RSA.generate(1024)
+    pub = key.publickey()
+    h = SHA256.new(pw)
+    sig = pkcs1_15.new(key).sign(h)
+    pkcs1_15.new(pub).verify(h, sig)
 
-def sha256_hash(i, passwords):
-    pw = passwords[i % len(passwords)]
-    h = hashlib.sha256(pw)
-    h.digest()
+def ecc_keygen(_):
+    ECC.generate(curve="P-256")
 
-def sha512_hash(i, passwords):
+def ecc_sign_verify(i, passwords):
     pw = passwords[i % len(passwords)]
-    h = hashlib.sha512(pw)
-    h.digest()
+    key = ECC.generate(curve="P-256")
+    h = SHA256.new(pw)
+    sig = DSS.new(key, "fips-186-3").sign(h)
+    DSS.new(key.public_key(), "fips-186-3").verify(h, sig)
+
+def dsa_keygen(_):
+    DSA.generate(1024)
+
+def dsa_sign_verify(i, passwords):
+    pw = passwords[i % len(passwords)]
+    key = DSA.generate(1024)
+    h = SHA256.new(pw)
+    sig = DSS.new(key, "fips-186-3").sign(h)
+    DSS.new(key.public_key(), "fips-186-3").verify(h, sig)
+
+print("Generating DH (2048-bit) parameters… may take 5–20s")
+dh_params = dh.generate_parameters(generator=2, key_size=2048, backend=default_backend())
+print("DH parameters ready.")
+
+def dh_exchange(_):
+    priv1 = dh_params.generate_private_key()
+    priv2 = dh_params.generate_private_key()
+    shared1 = priv1.exchange(priv2.public_key())
+    shared2 = priv2.exchange(priv1.public_key())
+    assert shared1 == shared2
 
 
 # ========== RUN ALL TESTS ==========
@@ -87,10 +114,13 @@ def run():
     passwords = load_top100()
 
     tests = [
-        ("MD5-hash", lambda i: md5_hash(i, passwords)),
-        ("SHA-1-hash", lambda i: sha1_hash(i, passwords)),
-        ("SHA-256-hash", lambda i: sha256_hash(i, passwords)),
-        ("SHA-512-hash", lambda i: sha512_hash(i, passwords)),
+        ("RSA-1024-keygen", lambda i: rsa_keygen(i)),
+        ("RSA-1024-sign_verify", lambda i: rsa_sign_verify(i, passwords)),
+        ("ECC-P256-keygen", lambda i: ecc_keygen(i)),
+        ("ECC-P256-sign_verify", lambda i: ecc_sign_verify(i, passwords)),
+        ("DSA-1024-keygen", lambda i: dsa_keygen(i)),
+        ("DSA-1024-sign_verify", lambda i: dsa_sign_verify(i, passwords)),
+        ("DH-2048-exchange", lambda i: dh_exchange(i)),
     ]
 
     rows = []
@@ -119,32 +149,32 @@ def run():
     plt.bar(df["algorithm"], df["wall_time_s"])
     plt.xticks(rotation=45, ha="right")
     plt.ylabel("Seconds")
-    plt.title("Hashing Algorithms — Wall Time")
+    plt.title("Asymmetric Algorithms — Wall Time")
     plt.tight_layout()
-    plt.savefig(f"{RESULT_DIR}/hash_time.png", dpi=150)
+    plt.savefig(f"{RESULT_DIR}/asymmetric_time.png", dpi=150)
     plt.close()
 
     plt.figure(figsize=(12, 5))
     plt.bar(df["algorithm"], df["cpu_time_s"])
     plt.xticks(rotation=45, ha="right")
     plt.ylabel("CPU Seconds")
-    plt.title("Hashing Algorithms — CPU Time")
+    plt.title("Asymmetric Algorithms — CPU Time")
     plt.tight_layout()
-    plt.savefig(f"{RESULT_DIR}/hash_cpu.png", dpi=150)
+    plt.savefig(f"{RESULT_DIR}/asymmetric_cpu.png", dpi=150)
     plt.close()
 
     plt.figure(figsize=(12, 5))
-    plt.bar(df["algorithm"], df["memory_peak_kb"])
+    plt.bar(df["algorithm"], df["memory_peak_bytes"])
     plt.xticks(rotation=45, ha="right")
     plt.ylabel("Peak RSS (KB)") 
-    plt.title("Hashing Algorithms — Memory Usage (M1)")
+    plt.title("Asymmetric Algorithms — Memory Usage (M1)")
     plt.tight_layout()
-    plt.savefig(f"{RESULT_DIR}/hash_memory.png", dpi=150)
+    plt.savefig(f"{RESULT_DIR}/asymmetric_memory.png", dpi=150)
     plt.close()
 
     print("\nSaved:")
     print(f" CSV  → {CSV_PATH}")
-    print(f" Graphs → {RESULT_DIR}/hash_*.png\n")
+    print(f" Graphs → {RESULT_DIR}/asymmetric_*.png\n")
 
 
 if __name__ == "__main__":
