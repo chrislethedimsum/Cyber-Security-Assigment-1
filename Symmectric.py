@@ -148,7 +148,7 @@ def run():
     plt.close()
 
     plt.figure(figsize=(12, 5))
-    plt.bar(df["algorithm"], df["memory_peak_kb"])  # Use peak memory in KB
+    plt.bar(df["algorithm"], df["memory_peak_kb"]) 
     plt.xticks(rotation=45, ha="right")
     plt.ylabel("Peak RSS (KB)") 
     plt.title("Symmetric Ciphers — Memory Usage (M1)")
