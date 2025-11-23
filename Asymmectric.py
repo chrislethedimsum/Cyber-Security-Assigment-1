@@ -164,7 +164,7 @@ def run():
     plt.close()
 
     plt.figure(figsize=(12, 5))
-    plt.bar(df["algorithm"], df["memory_peak_bytes"])
+    plt.bar(df["algorithm"], df["memory_peak_kb"])
     plt.xticks(rotation=45, ha="right")
     plt.ylabel("Peak RSS (KB)") 
     plt.title("Asymmetric Algorithms — Memory Usage (M1)")
